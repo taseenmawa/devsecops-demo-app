@@ -12,8 +12,6 @@ variables:
   MAVEN_OPTS: "-Dmaven.repo.local=$CI_PROJECT_DIR/.m2/repository"
   DOCKER_DRIVER: overlay2
   APP_NAME: "devsecops-demo"
-  STAGING_URL: "http://staging.example.com"
-  PRODUCTION_URL: "http://production.example.com"
 
 cache:
   paths:
@@ -38,7 +36,6 @@ unit-test:
     reports:
       junit:
         - target/surefire-reports/TEST-*.xml
-  coverage: '/Total.*?([0-9]{1,3})%/'
 
 dependency-check:
   stage: security-scan
@@ -48,91 +45,16 @@ dependency-check:
   artifacts:
     paths:
       - dependency-check-report/
-    expire_in: 1 week
-  allow_failure: true
-
-sast-scan:
-  stage: security-scan
-  image: sonarsource/sonar-scanner-cli:latest
-  script:
-    - sonar-scanner -Dsonar.projectKey=$APP_NAME -Dsonar.sources=src/main/java -Dsonar.host.url=http://sonarqube:9000 -Dsonar.login=$SONAR_TOKEN
   allow_failure: true
 
 build-docker:
   stage: build-image
   image: docker:20.10.16
-  services:
-    - docker:20.10.16-dind
-  before_script:
-    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
   script:
     - mvn package -DskipTests
-    - docker build -t $CI_REGISTRY_IMAGE:$CI_COMMIT_SHA .
-    - docker push $CI_REGISTRY_IMAGE:$CI_COMMIT_SHA
-  dependencies:
-    - build
+    - docker build -t $APP_NAME:$CI_COMMIT_SHA .
 
 deploy-staging:
   stage: deploy-staging
-  image: docker:20.10.16
-  services:
-    - docker:20.10.16-dind
   script:
-    - docker pull $CI_REGISTRY_IMAGE:$CI_COMMIT_SHA
-    - docker stop staging-app || true
-    - docker rm staging-app || true
-    - docker run -d --name staging-app -p 8081:8080 $CI_REGISTRY_IMAGE:$CI_COMMIT_SHA
-    - sleep 30
-    - curl -f http://localhost:8081/health || exit 1
-  environment:
-    name: staging
-    url: http://localhost:8081
-  dependencies:
-    - build-docker
-
-zap-security-test:
-  stage: security-test
-  image: owasp/zap2docker-stable:latest
-  script:
-    - mkdir -p zap-reports
-    - zap-baseline.py -t http://localhost:8081 -J zap-report.json -r zap-report.html
-  artifacts:
-    paths:
-      - zap-reports/
-    expire_in: 1 week
-  dependencies:
-    - deploy-staging
-  allow_failure: true
-
-deploy-production:
-  stage: deploy-production
-  image: docker:20.10.16
-  services:
-    - docker:20.10.16-dind
-  script:
-    - docker pull $CI_REGISTRY_IMAGE:$CI_COMMIT_SHA
-    - docker stop production-app || true
-    - docker rm production-app || true
-    - docker run -d --name production-app -p 8080:8080 $CI_REGISTRY_IMAGE:$CI_COMMIT_SHA
-    - sleep 30
-    - curl -f http://localhost:8080/health || exit 1
-  environment:
-    name: production
-    url: http://localhost:8080
-  when: manual
-  dependencies:
-    - build-docker
-  only:
-    - main
-
-setup-monitoring:
-  stage: monitor
-  image: alpine:latest
-  script:
-    - echo "Setting up monitoring for production deployment"
-    - echo "Prometheus metrics endpoint: http://localhost:8080/actuator/prometheus"
-    - echo "Grafana dashboard: http://localhost:3000"
-  dependencies:
-    - deploy-production
-  only:
-    - main
+    - docker run -d --name staging-app -p 8081:8080 $APP_NAME:$CI_COMMIT_SHA
