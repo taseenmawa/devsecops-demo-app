@@ -1,1 +1,10 @@
-Mock Vulnerability Report
+<?xml version="1.0" encoding="UTF-8"?>
+<analysis xmlns="https://jeremylong.github.io/DependencyCheck/dependency-check.2.5.xsd">
+  <scanInfo>
+    <engineVersion>6.5.3</engineVersion>
+  </scanInfo>
+  <projectInfo>
+    <name>devsecops-demo</name>
+  </projectInfo>
+  <dependencies/>
+</analysis>
