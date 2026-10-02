@@ -11,6 +11,7 @@ stages:
 variables:
   MAVEN_OPTS: "-Dmaven.repo.local=$CI_PROJECT_DIR/.m2/repository"
   DOCKER_DRIVER: overlay2
+  DOCKER_TLS_CERTDIR: ""
   APP_NAME: "devsecops-demo"
 
 cache:
@@ -50,11 +51,50 @@ dependency-check:
 build-docker:
   stage: build-image
   image: docker:20.10.16
+  services:
+    - name: docker:20.10.16-dind
+      alias: docker
   script:
     - mvn package -DskipTests
     - docker build -t $APP_NAME:$CI_COMMIT_SHA .
 
 deploy-staging:
   stage: deploy-staging
+  image: docker:20.10.16
+  services:
+    - name: docker:20.10.16-dind
+      alias: docker
   script:
     - docker run -d --name staging-app -p 8081:8080 $APP_NAME:$CI_COMMIT_SHA
+    - sleep 10
+    - docker ps
+
+zap-security-test:
+  stage: security-test
+  image: owasp/zap2docker-stable:latest
+  script:
+    - mkdir -p zap-reports
+    - zap-baseline.py -t http://docker:8081 -J zap-report.json -r zap-report.html || true
+    - cp /zap/wrk/zap-report.html zap-reports/ || true
+  artifacts:
+    paths:
+      - zap-reports/
+    expire_in: 1 week
+  allow_failure: true
+
+deploy-production:
+  stage: deploy-production
+  image: docker:20.10.16
+  services:
+    - name: docker:20.10.16-dind
+      alias: docker
+  script:
+    - docker run -d --name production-app -p 8080:8080 $APP_NAME:$CI_COMMIT_SHA
+    - sleep 10
+    - docker ps
+  when: manual
+
+monitor:
+  stage: monitor
+  script:
+    - echo "Monitoring active"
