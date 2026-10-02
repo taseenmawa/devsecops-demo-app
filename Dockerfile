@@ -1,9 +1,13 @@
-FROM openjdk:11-jre-slim
-
+# Stage 1: Build JAR using Maven
+FROM maven:3.8.6-eclipse-temurin-17 AS builder
 WORKDIR /app
+COPY pom.xml .
+COPY src ./src
+RUN mvn clean package -DskipTests
 
-COPY target/devsecops-demo-1.0.0.jar app.jar
-
+# Stage 2: Runtime image
+FROM eclipse-temurin:17-jre-alpine
+WORKDIR /app
+COPY --from=builder /app/target/*.jar app.jar
 EXPOSE 8080
-
 ENTRYPOINT ["java", "-jar", "app.jar"]
